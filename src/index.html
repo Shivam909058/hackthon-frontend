@@ -123,10 +123,8 @@
             </div>
         </div>
 
-        <!-- ElevenLabs Widget - Only include once, without style="display: none" -->
-        <div id="convai-container">
-            <!-- Widget will be inserted here programmatically -->
-        </div>
+        <!-- Hidden container for widget -->
+        <div id="convai-container" style="position: absolute; top: -9999px; left: -9999px;"></div>
 
         <!-- Make sure this part is correctly included in your index.html file -->
         <div class="background-waves">
@@ -154,7 +152,7 @@
         <span class="notification-message"></span>
     </div>
 
-    <!-- Load script once -->
+    <!-- Load the Convai script just once -->
     <script src="https://unpkg.com/@elevenlabs/convai-widget-embed" type="text/javascript"></script>
     <script src="bundle.js"></script>
 </body>

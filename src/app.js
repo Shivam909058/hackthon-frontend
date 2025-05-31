@@ -5,8 +5,10 @@ const API_URL = process.env.REACT_APP_API_URL || 'https://hackthon-backend-zeta.
 
 let conversation = null;
 let currentTheme = 'light';
-let convaiWidget = null;
-let keepSessionActive = true;
+let sessionId = null;
+let keepAliveInterval = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
@@ -24,19 +26,42 @@ document.addEventListener('DOMContentLoaded', function() {
     // Ensure waves are visible
     ensureWavesAreVisible();
     
-    // Initialize the Convai widget container
-    initializeConvaiWidget();
+    // Clean up on page unload
+    window.addEventListener('beforeunload', cleanupOnUnload);
 });
 
-// Initialize the Convai widget programmatically instead of in HTML
-function initializeConvaiWidget() {
-    // Clear any existing widget first
-    const container = document.getElementById('convai-container');
-    container.innerHTML = '';
-
-    // Create the widget element only when starting conversation
-    // This prevents duplicated custom element registration
-    window.convaiWidgetInitialized = false;
+// Clean up resources when page is closed
+function cleanupOnUnload() {
+    if (conversation) {
+        try {
+            // Try to end the conversation gracefully
+            conversation.endSession();
+        } catch (error) {
+            console.error('Error ending conversation on unload:', error);
+        }
+    }
+    
+    if (sessionId) {
+        // Notify the server that the session is ending
+        try {
+            fetch(`${API_URL}/api/end-session`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ sessionId }),
+                // Use keepalive to ensure the request completes even if page is unloading
+                keepalive: true
+            });
+        } catch (error) {
+            console.error('Error ending session on unload:', error);
+        }
+    }
+    
+    // Clear any intervals
+    if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+    }
 }
 
 // Theme toggle function
@@ -82,13 +107,42 @@ async function requestMicrophonePermission() {
 // Get signed URL from the backend
 async function getSignedUrl() {
     try {
-        const response = await fetch(`${API_URL}/api/signed-url`);
+        // Include existing session ID if we have one
+        let url = `${API_URL}/api/signed-url`;
+        if (sessionId) {
+            url += `?sessionId=${sessionId}`;
+        }
+        
+        const response = await fetch(url);
         if (!response.ok) throw new Error('Failed to get signed URL');
         const data = await response.json();
+        
+        // Save the session ID for future requests
+        if (data.sessionId) {
+            sessionId = data.sessionId;
+        }
+        
         return data.signedUrl;
     } catch (error) {
         console.error('Error getting signed URL:', error);
         throw error;
+    }
+}
+
+// Send keep-alive ping to server
+async function sendKeepAlive() {
+    if (!sessionId) return;
+    
+    try {
+        await fetch(`${API_URL}/api/keep-alive`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ sessionId })
+        });
+    } catch (error) {
+        console.error('Error sending keep-alive:', error);
     }
 }
 
@@ -191,6 +245,30 @@ function showNotification(message, type = 'info') {
     }, 5000);
 }
 
+// Setup the Convai widget
+async function setupConvaiWidget() {
+    try {
+        const agentId = await getAgentId();
+        const container = document.getElementById('convai-container');
+        
+        // Clear any existing widgets
+        container.innerHTML = '';
+        
+        // Create the new widget
+        const widget = document.createElement('elevenlabs-convai');
+        widget.setAttribute('agent-id', agentId);
+        
+        // Add to container
+        container.appendChild(widget);
+        
+        // Give time for the widget to initialize
+        return new Promise(resolve => setTimeout(resolve, 1000));
+    } catch (error) {
+        console.error('Error setting up Convai widget:', error);
+        throw error;
+    }
+}
+
 // Start conversation with ElevenLabs API
 async function startConversation() {
     const startButton = document.getElementById('startButton');
@@ -201,6 +279,9 @@ async function startConversation() {
     startButton.innerHTML = '<i class="fas fa-spinner spinner"></i><span>Connecting...</span>';
     
     try {
+        // Reset reconnect attempts counter
+        reconnectAttempts = 0;
+        
         const hasPermission = await requestMicrophonePermission();
         if (!hasPermission) {
             showNotification('Microphone permission is required for the conversation.', 'error');
@@ -208,29 +289,20 @@ async function startConversation() {
             startButton.disabled = false;
             return;
         }
-
-        // Get agent ID 
-        const agentId = await getAgentId();
         
-        // Create the Convai widget element only when starting conversation
-        if (!window.convaiWidgetInitialized) {
-            const container = document.getElementById('convai-container');
-            container.innerHTML = ''; // Clear container first
-            
-            // Create the widget element
-            convaiWidget = document.createElement('elevenlabs-convai');
-            convaiWidget.setAttribute('agent-id', agentId);
-            container.appendChild(convaiWidget);
-            
-            window.convaiWidgetInitialized = true;
-            
-            // Give a moment for the widget to initialize
-            await new Promise(resolve => setTimeout(resolve, 1000));
-        }
+        // Set up the Convai widget
+        await setupConvaiWidget();
 
+        // Get signed URL
         const signedUrl = await getSignedUrl();
-        keepSessionActive = true;
         
+        // Start keep-alive pings to server
+        if (keepAliveInterval) {
+            clearInterval(keepAliveInterval);
+        }
+        keepAliveInterval = setInterval(sendKeepAlive, 10000); // Every 10 seconds
+        
+        // Start the conversation
         conversation = await Conversation.startSession({
             signedUrl: signedUrl,
             onConnect: () => {
@@ -239,45 +311,123 @@ async function startConversation() {
                 endButton.disabled = false;
                 startButton.innerHTML = '<i class="fas fa-play"></i><span>Start Conversation</span>';
                 showNotification('Connected successfully! You can start speaking now.', 'success');
+                
+                // Reset reconnect attempts on successful connection
+                reconnectAttempts = 0;
             },
             onDisconnect: () => {
-                // Only update UI if we're intentionally ending the session
-                if (!keepSessionActive) {
+                console.log('WebSocket disconnected');
+                
+                // Don't update UI immediately, try to reconnect first
+                if (endButton.disabled === false) { // Only try to reconnect if we haven't manually ended
+                    attemptReconnection();
+                } else {
+                    // We manually ended, so update UI
                     updateConnectionStatus(false);
                     startButton.disabled = false;
                     endButton.disabled = true;
-                    endButton.innerHTML = '<i class="fas fa-stop"></i><span>End</span>';
-                } else {
-                    // Attempt to reconnect if we weren't trying to end the session
-                    console.log("WebSocket disconnected unexpectedly. Attempting to reconnect...");
-                    setTimeout(() => {
-                        if (keepSessionActive && !conversation) {
-                            startConversation();
-                        }
-                    }, 1000);
                 }
             },
             onError: (error) => {
                 console.error('Conversation error:', error);
-                showNotification('An error occurred during the conversation.', 'error');
                 
-                // Only enable start button if we're intentionally ending the session
-                if (!keepSessionActive) {
+                if (error.message && error.message.includes('WebSocket')) {
+                    // WebSocket specific errors, try to reconnect
+                    attemptReconnection();
+                } else {
+                    showNotification('An error occurred during the conversation.', 'error');
                     startButton.disabled = false;
                     startButton.innerHTML = '<i class="fas fa-play"></i><span>Start Conversation</span>';
                 }
             },
             onModeChange: (mode) => {
                 updateSpeakingStatus(mode);
-            },
-            // Set larger timeout for connection
-            timeout: 30000
+            }
         });
     } catch (error) {
         console.error('Error starting conversation:', error);
         showNotification('Failed to start conversation. Please try again.', 'error');
         startButton.disabled = false;
         startButton.innerHTML = '<i class="fas fa-play"></i><span>Start Conversation</span>';
+        
+        // Clear any intervals
+        if (keepAliveInterval) {
+            clearInterval(keepAliveInterval);
+            keepAliveInterval = null;
+        }
+    }
+}
+
+// Attempt to reconnect after disconnection
+async function attemptReconnection() {
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        console.log('Max reconnection attempts reached, giving up');
+        showNotification('Connection lost. Please restart the conversation.', 'error');
+        
+        updateConnectionStatus(false);
+        document.getElementById('startButton').disabled = false;
+        document.getElementById('startButton').innerHTML = '<i class="fas fa-play"></i><span>Start Conversation</span>';
+        document.getElementById('endButton').disabled = true;
+        
+        // Clear any intervals
+        if (keepAliveInterval) {
+            clearInterval(keepAliveInterval);
+            keepAliveInterval = null;
+        }
+        
+        return;
+    }
+    
+    reconnectAttempts++;
+    console.log(`Attempting to reconnect (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+    
+    try {
+        // Get a fresh signed URL
+        const signedUrl = await getSignedUrl();
+        
+        // Clean up old conversation if it exists
+        if (conversation) {
+            try {
+                await conversation.endSession();
+            } catch (e) {
+                console.log('Error ending old session:', e);
+                // Continue anyway
+            }
+        }
+        
+        // Create a new conversation
+        conversation = await Conversation.startSession({
+            signedUrl: signedUrl,
+            onConnect: () => {
+                console.log('Reconnection successful');
+                updateConnectionStatus(true);
+                document.getElementById('startButton').disabled = true;
+                document.getElementById('endButton').disabled = false;
+                showNotification('Reconnected successfully!', 'success');
+                
+                // Reset reconnect attempts on successful connection
+                reconnectAttempts = 0;
+            },
+            onDisconnect: () => {
+                console.log('WebSocket disconnected after reconnection');
+                // Try to reconnect again
+                setTimeout(attemptReconnection, 2000);
+            },
+            onError: (error) => {
+                console.error('Error after reconnection:', error);
+                // Try to reconnect again after a delay
+                setTimeout(attemptReconnection, 2000);
+            },
+            onModeChange: (mode) => {
+                updateSpeakingStatus(mode);
+            }
+        });
+    } catch (error) {
+        console.error('Error during reconnection:', error);
+        
+        // Exponential backoff
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
+        setTimeout(attemptReconnection, delay);
     }
 }
 
@@ -289,25 +439,54 @@ async function endConversation() {
     endButton.disabled = true;
     endButton.innerHTML = '<i class="fas fa-spinner spinner"></i><span>Ending...</span>';
     
-    // Set flag to prevent auto-reconnect
-    keepSessionActive = false;
-    
     try {
+        // Clear keep-alive interval
+        if (keepAliveInterval) {
+            clearInterval(keepAliveInterval);
+            keepAliveInterval = null;
+        }
+        
+        // Notify server to end session
+        if (sessionId) {
+            try {
+                await fetch(`${API_URL}/api/end-session`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ sessionId })
+                });
+            } catch (e) {
+                console.error('Error notifying server of session end:', e);
+                // Continue anyway
+            }
+        }
+        
+        // End the conversation
         if (conversation) {
-            await conversation.endSession();
+            try {
+                await conversation.endSession();
+            } catch (e) {
+                console.error('Error ending conversation:', e);
+                // Continue anyway
+            }
             conversation = null;
         }
         
+        // Reset state
+        sessionId = null;
+        reconnectAttempts = 0;
+        
+        // Update UI
         updateConnectionStatus(false);
         startButton.disabled = false;
         endButton.disabled = true;
         endButton.innerHTML = '<i class="fas fa-stop"></i><span>End</span>';
         showNotification('Conversation ended successfully.', 'info');
         
-        // Remove the Convai widget to prevent issues on restart
+        // Clean up the Convai widget
         const container = document.getElementById('convai-container');
         container.innerHTML = '';
-        window.convaiWidgetInitialized = false;
     } catch (error) {
         console.error('Error ending conversation:', error);
         endButton.innerHTML = '<i class="fas fa-stop"></i><span>End</span>';
