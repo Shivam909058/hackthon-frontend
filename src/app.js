@@ -6,7 +6,7 @@ const API_URL = process.env.REACT_APP_API_URL || 'https://hackthon-backend-zeta.
 let conversation = null;
 let animationActive = false;
 
-
+// Initialize scroll to top button and disk visualizer
 document.addEventListener('DOMContentLoaded', function() {
     const scrollBtn = document.getElementById('scrollTopBtn');
     
@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    
+    // Show/hide scroll button based on scroll position
     window.addEventListener('scroll', () => {
         if (window.scrollY > 300) {
             scrollBtn.style.opacity = '1';
@@ -26,12 +26,15 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    
+    // Initialize buttons
     document.getElementById('startButton').addEventListener('click', startConversation);
     document.getElementById('endButton').addEventListener('click', endConversation);
     
+    // Initialize disk visualizer in paused state
+    pauseDiskAnimation();
     
-    pauseVisualizer();
+    // Start simulating voice activity
+    setInterval(simulateVoiceActivity, 500);
 });
 
 async function requestMicrophonePermission() {
@@ -63,72 +66,110 @@ function updateConnectionStatus(isConnected) {
         statusElement.innerHTML = '<i class="fas fa-plug"></i> Connected';
         statusElement.classList.remove('disconnected');
         statusElement.classList.add('connected');
+        startDiskAnimation();
     } else {
         statusElement.innerHTML = '<i class="fas fa-plug"></i> Disconnected';
         statusElement.classList.remove('connected');
         statusElement.classList.add('disconnected');
+        pauseDiskAnimation();
     }
 }
 
 function updateSpeakingStatus(mode) {
     const statusElement = document.getElementById('speakingStatus');
+    const diskContainer = document.getElementById('diskContainer');
     const isSpeaking = mode.mode === 'speaking';
     
     if (isSpeaking) {
         statusElement.innerHTML = '<i class="fas fa-volume-high"></i> Agent Speaking';
         statusElement.classList.remove('silent');
         statusElement.classList.add('speaking');
-        activateVisualizer();
+        diskContainer.classList.add('speaking');
+        animateSpeakingDisk();
     } else {
         statusElement.innerHTML = '<i class="fas fa-volume-off"></i> Agent Silent';
         statusElement.classList.remove('speaking');
         statusElement.classList.add('silent');
-        pauseVisualizer();
+        diskContainer.classList.remove('speaking');
+        animateListeningDisk();
     }
 }
 
-function activateVisualizer() {
-    const bars = document.querySelectorAll('.visualizer .bar');
+// New functions for disk animation
+function startDiskAnimation() {
+    const diskContainer = document.getElementById('diskContainer');
+    diskContainer.classList.remove('paused');
     animationActive = true;
-    
-    bars.forEach(bar => {
-        bar.style.animationPlayState = 'running';
-    });
 }
 
-function pauseVisualizer() {
-    const bars = document.querySelectorAll('.visualizer .bar');
+function pauseDiskAnimation() {
+    const diskContainer = document.getElementById('diskContainer');
+    diskContainer.classList.add('paused');
     animationActive = false;
-    
-    bars.forEach(bar => {
-        bar.style.animationPlayState = 'paused';
-        bar.style.height = '15px';
-        bar.style.transform = 'scaleY(1)';
-    });
 }
 
-function showNotification(message, type = 'info') {
-    const notification = document.getElementById('notification');
-    const notificationMessage = notification.querySelector('.notification-message');
-    const notificationIcon = notification.querySelector('.notification-icon');
+function animateSpeakingDisk() {
+    if (!animationActive) return;
     
-    // Set icon based on type
-    if (type === 'success') {
-        notificationIcon.className = 'notification-icon fas fa-check-circle';
-    } else if (type === 'error') {
-        notificationIcon.className = 'notification-icon fas fa-exclamation-circle';
-    } else {
-        notificationIcon.className = 'notification-icon fas fa-info-circle';
-    }
+    const diskContainer = document.getElementById('diskContainer');
+    const waves = document.querySelectorAll('.wave');
     
-    // Set message and show notification
-    notificationMessage.textContent = message;
-    notification.className = `notification ${type} show`;
+    // Change mic icon to speaker when AI is speaking
+    const micIcon = diskContainer.querySelector('.mic-icon i');
+    micIcon.className = 'fas fa-volume-high';
     
-    // Hide notification after 5 seconds
-    setTimeout(() => {
-        notification.classList.remove('show');
-    }, 5000);
+    // Increase animation intensity
+    waves.forEach((wave, index) => {
+        wave.style.animationDuration = '1.2s';
+    });
+    
+    // Rotate disk faster
+    const disk = diskContainer.querySelector('.disk');
+    disk.style.animationDuration = '4s';
+}
+
+function animateListeningDisk() {
+    if (!animationActive) return;
+    
+    const diskContainer = document.getElementById('diskContainer');
+    const waves = document.querySelectorAll('.wave');
+    
+    // Change back to mic icon when AI is listening
+    const micIcon = diskContainer.querySelector('.mic-icon i');
+    micIcon.className = 'fas fa-microphone';
+    
+    // Normal animation intensity
+    waves.forEach((wave, index) => {
+        wave.style.animationDuration = '2s';
+    });
+    
+    // Normal disk rotation
+    const disk = diskContainer.querySelector('.disk');
+    disk.style.animationDuration = '8s';
+}
+
+function simulateVoiceActivity() {
+    if (!animationActive) return;
+    
+    const diskContainer = document.getElementById('diskContainer');
+    const isSpeaking = diskContainer.classList.contains('speaking');
+    const waves = document.querySelectorAll('.wave');
+    const randomIntensity = Math.random();
+    
+    // Apply different intensity based on whether the AI is speaking or listening
+    waves.forEach((wave, index) => {
+        let baseScale = isSpeaking ? 0.7 : 0.5;
+        let intensityMultiplier = isSpeaking ? 1.8 : 1.5;
+        const scale = baseScale + randomIntensity * intensityMultiplier;
+        const delay = index * 0.1;
+        
+        wave.style.transform = `translate(-50%, -50%) scale(${scale})`;
+    });
+    
+    // Change disk color slightly based on activity
+    const disk = document.querySelector('.disk');
+    const hue = Math.floor(Math.random() * 30); // Small range to stay in purple theme
+    disk.style.filter = `hue-rotate(${hue}deg) brightness(${0.9 + randomIntensity * 0.2})`;
 }
 
 async function startConversation() {
@@ -181,6 +222,30 @@ async function startConversation() {
         startButton.disabled = false;
         startButton.innerHTML = '<i class="fas fa-microphone"></i><span>Start Conversation</span>';
     }
+}
+
+function showNotification(message, type = 'info') {
+    const notification = document.getElementById('notification');
+    const notificationMessage = notification.querySelector('.notification-message');
+    const notificationIcon = notification.querySelector('.notification-icon');
+    
+    // Set icon based on type
+    if (type === 'success') {
+        notificationIcon.className = 'notification-icon fas fa-check-circle';
+    } else if (type === 'error') {
+        notificationIcon.className = 'notification-icon fas fa-exclamation-circle';
+    } else {
+        notificationIcon.className = 'notification-icon fas fa-info-circle';
+    }
+    
+    // Set message and show notification
+    notificationMessage.textContent = message;
+    notification.className = `notification ${type} show`;
+    
+    // Hide notification after 5 seconds
+    setTimeout(() => {
+        notification.classList.remove('show');
+    }, 5000);
 }
 
 async function endConversation() {
