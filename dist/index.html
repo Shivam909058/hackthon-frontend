@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoiceChat AI Assistant</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <div class="robot-icon">
+                <i class="fas fa-robot"></i>
+            </div>
+            <h1>VoiceChat AI</h1>
+        </div>
+        <p class="tagline">Your personal AI conversation partner</p>
+        
+        <div class="chat-card">
+            <div class="status-row">
+                <div id="connectionStatus" class="status-pill disconnected">
+                    <i class="fas fa-plug"></i> Disconnected
+                </div>
+                <div id="speakingStatus" class="status-pill silent">
+                    <i class="fas fa-volume-off"></i> Agent Silent
+                </div>
+            </div>
+            
+            <div class="visualizer-container">
+                <div class="visualizer">
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                </div>
+            </div>
+            
+            <div class="action-buttons">
+                <button id="startButton" class="action-button start">
+                    <i class="fas fa-microphone"></i>
+                    <span>Start Conversation</span>
+                </button>
+                <button id="endButton" class="action-button end" disabled>
+                    <i class="fas fa-stop-circle"></i>
+                    <span>End Conversation</span>
+                </button>
+            </div>
+            
+            <div class="tips-section">
+                <div class="tips-header">
+                    <i class="fas fa-lightbulb"></i>
+                    <h3>Tips</h3>
+                </div>
+                <ul class="tips-list">
+                    <li><span class="arrow">→</span> Speak clearly when the AI is listening</li>
+                    <li><span class="arrow">→</span> Try asking about different topics</li>
+                    <li><span class="arrow">→</span> You can interrupt the AI by speaking</li>
+                </ul>
+            </div>
+        </div>
+        
+        <elevenlabs-convai agent-id="agent_01jwjjfmjqejbsn6gnd7dma2e2"></elevenlabs-convai>
+        <script src="https://unpkg.com/@elevenlabs/convai-widget-embed" async type="text/javascript"></script>
+    </div>
+    
+    <footer>
+        <div class="footer-content">
+            <p>Powered by <a href="https://elevenlabs.io">ElevenLabs</a> <span class="ai-text">Conversational AI</span></p>
+            <button id="scrollTopBtn" class="scroll-top-btn"><i class="fas fa-arrow-up"></i></button>
+        </div>
+    </footer>
+    
+    <div id="notification" class="notification">
+        <div class="notification-content">
+            <i class="notification-icon"></i>
+            <span class="notification-message"></span>
+        </div>
+    </div>
+    
+    <script src="/static/bundle.js"></script>
+</body>
+</html>
