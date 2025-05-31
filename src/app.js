@@ -1,7 +1,7 @@
 // --- src/app.js ---
 import { Conversation } from '@11labs/client';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+const API_URL = process.env.REACT_APP_API_URL || 'https://hackthon-backend-zeta.vercel.app';
 
 let conversation = null;
 let animationActive = false;
