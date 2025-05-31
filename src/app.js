@@ -15,6 +15,8 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 
 // Add this near the top of your existing file, with other variable declarations
 let reminderCheckInterval = null;
+let isWaitingForDelay = false;
+let delayCheckInterval = null;
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
@@ -376,6 +378,53 @@ function stopReminderCheck() {
   }
 }
 
+// Add this function to start checking for delays
+function startDelayCheck() {
+  if (delayCheckInterval) {
+    clearInterval(delayCheckInterval);
+  }
+  
+  delayCheckInterval = setInterval(async () => {
+    if (!sessionId) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/api/check-delay?sessionId=${sessionId}`);
+      if (!response.ok) return;
+      
+      const data = await response.json();
+      
+      if (data.hasActiveDelay) {
+        isWaitingForDelay = true;
+        
+        // Update UI to show waiting status
+        updateWaitingStatus(data.remainingSeconds);
+      } else if (isWaitingForDelay) {
+        // We were waiting but now the delay is over
+        isWaitingForDelay = false;
+        
+        // Update UI to show normal status
+        updateWaitingStatus(0);
+      }
+    } catch (error) {
+      console.error('Error checking for delays:', error);
+    }
+  }, 1000);
+}
+
+// Add this function to update UI based on waiting status
+function updateWaitingStatus(remainingSeconds) {
+  const speakingStatus = document.getElementById('speakingStatus');
+  
+  if (remainingSeconds > 0) {
+    speakingStatus.textContent = `Waiting (${remainingSeconds}s)`;
+    speakingStatus.style.color = '#ffa500'; // Orange for waiting
+  } else {
+    // Reset to normal
+    speakingStatus.textContent = isWaitingForDelay ? 'Listening' : speakingStatus.textContent;
+    speakingStatus.style.color = '';
+  }
+}
+
 // Start conversation with ElevenLabs API
 async function startConversation() {
     const startButton = document.getElementById('startButton');
@@ -408,6 +457,9 @@ async function startConversation() {
         
         // Start checking for reminders
         startReminderCheck();
+        
+        // Start checking for delays
+        startDelayCheck();
         
         // Clear conversation history
         conversationHistory = [];
@@ -453,9 +505,12 @@ async function startConversation() {
             onModeChange: (mode) => {
                 updateSpeakingStatus(mode);
             },
-            onMessage: (message) => {
+            onMessage: async (message) => {
                 // Track messages and store in memory
                 if (message.role === 'assistant') {
+                    // Check if the assistant's message contains delay instructions
+                    const hasDelay = await processMessageForDelays(message.content);
+                    
                     // Find the most recent user message
                     const lastUserMessage = conversationHistory.length > 0 ? 
                         conversationHistory[conversationHistory.length - 1].content : 
@@ -550,9 +605,12 @@ async function attemptReconnection() {
             onModeChange: (mode) => {
                 updateSpeakingStatus(mode);
             },
-            onMessage: (message) => {
+            onMessage: async (message) => {
                 // Track messages and store in memory
                 if (message.role === 'assistant') {
+                    // Check if the assistant's message contains delay instructions
+                    const hasDelay = await processMessageForDelays(message.content);
+                    
                     // Find the most recent user message
                     const lastUserMessage = conversationHistory.length > 0 ? 
                         conversationHistory[conversationHistory.length - 1].content : 
@@ -641,6 +699,12 @@ async function endConversation() {
         
         // Stop reminder checks
         stopReminderCheck();
+        
+        // Stop delay checks
+        if (delayCheckInterval) {
+            clearInterval(delayCheckInterval);
+            delayCheckInterval = null;
+        }
     } catch (error) {
         console.error('Error ending conversation:', error);
         endButton.innerHTML = '<i class="fas fa-stop"></i><span>End</span>';
@@ -712,6 +776,32 @@ function processUserMessage(message) {
   
   // Return the message for normal processing
   return message;
+}
+
+// Add a function to process messages for delays
+async function processMessageForDelays(message) {
+  if (!sessionId) return false;
+  
+  try {
+    const response = await fetch(`${API_URL}/api/process-message`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        sessionId,
+        message
+      })
+    });
+    
+    if (!response.ok) return false;
+    
+    const data = await response.json();
+    return data.hasDelay;
+  } catch (error) {
+    console.error('Error processing message for delays:', error);
+    return false;
+  }
 }
 
 // You'd call this when processing user input
