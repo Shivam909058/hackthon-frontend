@@ -5,6 +5,8 @@ const API_URL = process.env.REACT_APP_API_URL || 'https://hackthon-backend-zeta.
 
 let conversation = null;
 let currentTheme = 'light';
+let convaiWidget = null;
+let keepSessionActive = true;
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
@@ -21,7 +23,21 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Ensure waves are visible
     ensureWavesAreVisible();
+    
+    // Initialize the Convai widget container
+    initializeConvaiWidget();
 });
+
+// Initialize the Convai widget programmatically instead of in HTML
+function initializeConvaiWidget() {
+    // Clear any existing widget first
+    const container = document.getElementById('convai-container');
+    container.innerHTML = '';
+
+    // Create the widget element only when starting conversation
+    // This prevents duplicated custom element registration
+    window.convaiWidgetInitialized = false;
+}
 
 // Theme toggle function
 function toggleTheme() {
@@ -72,6 +88,19 @@ async function getSignedUrl() {
         return data.signedUrl;
     } catch (error) {
         console.error('Error getting signed URL:', error);
+        throw error;
+    }
+}
+
+// Get agent ID from the backend
+async function getAgentId() {
+    try {
+        const response = await fetch(`${API_URL}/api/getAgentId`);
+        if (!response.ok) throw new Error('Failed to get agent ID');
+        const data = await response.json();
+        return data.agentId;
+    } catch (error) {
+        console.error('Error getting agent ID:', error);
         throw error;
     }
 }
@@ -180,7 +209,27 @@ async function startConversation() {
             return;
         }
 
+        // Get agent ID 
+        const agentId = await getAgentId();
+        
+        // Create the Convai widget element only when starting conversation
+        if (!window.convaiWidgetInitialized) {
+            const container = document.getElementById('convai-container');
+            container.innerHTML = ''; // Clear container first
+            
+            // Create the widget element
+            convaiWidget = document.createElement('elevenlabs-convai');
+            convaiWidget.setAttribute('agent-id', agentId);
+            container.appendChild(convaiWidget);
+            
+            window.convaiWidgetInitialized = true;
+            
+            // Give a moment for the widget to initialize
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
         const signedUrl = await getSignedUrl();
+        keepSessionActive = true;
         
         conversation = await Conversation.startSession({
             signedUrl: signedUrl,
@@ -192,20 +241,37 @@ async function startConversation() {
                 showNotification('Connected successfully! You can start speaking now.', 'success');
             },
             onDisconnect: () => {
-                updateConnectionStatus(false);
-                startButton.disabled = false;
-                endButton.disabled = true;
-                endButton.innerHTML = '<i class="fas fa-stop"></i><span>End</span>';
+                // Only update UI if we're intentionally ending the session
+                if (!keepSessionActive) {
+                    updateConnectionStatus(false);
+                    startButton.disabled = false;
+                    endButton.disabled = true;
+                    endButton.innerHTML = '<i class="fas fa-stop"></i><span>End</span>';
+                } else {
+                    // Attempt to reconnect if we weren't trying to end the session
+                    console.log("WebSocket disconnected unexpectedly. Attempting to reconnect...");
+                    setTimeout(() => {
+                        if (keepSessionActive && !conversation) {
+                            startConversation();
+                        }
+                    }, 1000);
+                }
             },
             onError: (error) => {
                 console.error('Conversation error:', error);
                 showNotification('An error occurred during the conversation.', 'error');
-                startButton.disabled = false;
-                startButton.innerHTML = '<i class="fas fa-play"></i><span>Start Conversation</span>';
+                
+                // Only enable start button if we're intentionally ending the session
+                if (!keepSessionActive) {
+                    startButton.disabled = false;
+                    startButton.innerHTML = '<i class="fas fa-play"></i><span>Start Conversation</span>';
+                }
             },
             onModeChange: (mode) => {
                 updateSpeakingStatus(mode);
-            }
+            },
+            // Set larger timeout for connection
+            timeout: 30000
         });
     } catch (error) {
         console.error('Error starting conversation:', error);
@@ -223,6 +289,9 @@ async function endConversation() {
     endButton.disabled = true;
     endButton.innerHTML = '<i class="fas fa-spinner spinner"></i><span>Ending...</span>';
     
+    // Set flag to prevent auto-reconnect
+    keepSessionActive = false;
+    
     try {
         if (conversation) {
             await conversation.endSession();
@@ -234,6 +303,11 @@ async function endConversation() {
         endButton.disabled = true;
         endButton.innerHTML = '<i class="fas fa-stop"></i><span>End</span>';
         showNotification('Conversation ended successfully.', 'info');
+        
+        // Remove the Convai widget to prevent issues on restart
+        const container = document.getElementById('convai-container');
+        container.innerHTML = '';
+        window.convaiWidgetInitialized = false;
     } catch (error) {
         console.error('Error ending conversation:', error);
         endButton.innerHTML = '<i class="fas fa-stop"></i><span>End</span>';

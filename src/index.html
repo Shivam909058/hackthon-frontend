@@ -123,9 +123,9 @@
             </div>
         </div>
 
-        <!-- Hidden ElevenLabs Widget -->
-        <div style="display: none;">
-            <elevenlabs-convai agent-id="agent_01jwjjfmjqejbsn6gnd7dma2e2"></elevenlabs-convai>
+        <!-- ElevenLabs Widget - Only include once, without style="display: none" -->
+        <div id="convai-container">
+            <!-- Widget will be inserted here programmatically -->
         </div>
 
         <!-- Make sure this part is correctly included in your index.html file -->
@@ -153,9 +153,9 @@
         <i class="notification-icon"></i>
         <span class="notification-message"></span>
     </div>
-    <elevenlabs-convai agent-id="agent_01jwjjfmjqejbsn6gnd7dma2e2"></elevenlabs-convai><script src="https://unpkg.com/@elevenlabs/convai-widget-embed" async type="text/javascript"></script>
 
-    <script src="https://unpkg.com/@elevenlabs/convai-widget-embed" async type="text/javascript"></script>
+    <!-- Load script once -->
+    <script src="https://unpkg.com/@elevenlabs/convai-widget-embed" type="text/javascript"></script>
     <script src="bundle.js"></script>
 </body>
 </html>
