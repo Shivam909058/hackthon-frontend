@@ -18,6 +18,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize frequency animation
     animateFrequencyBars();
+    
+    // Ensure waves are visible
+    ensureWavesAreVisible();
 });
 
 // Theme toggle function
@@ -113,6 +116,11 @@ function updateSpeakingStatus(mode) {
         frequencyBars.classList.add('active');
         particles.classList.add('active');
         orbIcon.className = 'fas fa-volume-up orb-icon';
+        
+        // Intensify background waves during speaking
+        document.querySelectorAll('.wave-layer').forEach(layer => {
+            layer.style.animationDuration = '10s';
+        });
     } else {
         speakingIndicator.classList.remove('speaking');
         speakingStatus.textContent = 'Listening';
@@ -121,6 +129,11 @@ function updateSpeakingStatus(mode) {
         frequencyBars.classList.remove('active');
         particles.classList.remove('active');
         orbIcon.className = 'fas fa-microphone orb-icon';
+        
+        // Return background waves to normal during listening
+        document.querySelectorAll('.wave-layer').forEach((layer, index) => {
+            layer.style.animationDuration = `${15 + index * 5}s`;
+        });
     }
 }
 
@@ -234,3 +247,35 @@ window.addEventListener('error', function(event) {
     console.error('Global error:', event.error);
     showNotification('An unexpected error occurred.', 'error');
 });
+
+// Add this function to your app.js file and call it in the DOMContentLoaded event
+function ensureWavesAreVisible() {
+    // Check if waves container exists
+    let wavesContainer = document.querySelector('.background-waves');
+    
+    // If it doesn't exist, create it
+    if (!wavesContainer) {
+        wavesContainer = document.createElement('div');
+        wavesContainer.className = 'background-waves';
+        document.body.prepend(wavesContainer);
+    }
+    
+    // Clear existing waves
+    wavesContainer.innerHTML = '';
+    
+    // Create new wave layers
+    for (let i = 0; i < 3; i++) {
+        const waveLayer = document.createElement('div');
+        waveLayer.className = 'wave-layer';
+        waveLayer.style.top = `${i * 10}%`;
+        waveLayer.style.opacity = (0.8 - (i * 0.2)).toString();
+        waveLayer.style.animationDuration = `${15 + (i * 5)}s`;
+        if (i === 1) waveLayer.style.animationDirection = 'reverse';
+        if (i === 2) waveLayer.style.animationDelay = '2s';
+        wavesContainer.appendChild(waveLayer);
+    }
+    
+    // Ensure the waves container is visible
+    wavesContainer.style.display = 'block';
+    wavesContainer.style.opacity = '0.4';
+}
