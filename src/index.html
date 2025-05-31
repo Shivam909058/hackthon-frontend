@@ -3,87 +3,151 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VoiceChat AI Assistant</title>
+    <title>VoiceChat AI - Conversational AI Assistant</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <div class="logo">
-            <div class="robot-icon">
-                <i class="fas fa-robot"></i>
+    <!-- Header -->
+    <header>
+        <div class="header-container">
+            <div class="logo-section">
+                <div class="logo">
+                    <div class="logo-icon">
+                        <i class="fas fa-microphone"></i>
+                    </div>
+                    VoiceChat AI
+                </div>
+                <span class="beta-badge">Beta</span>
             </div>
-            <h1>VoiceChat AI</h1>
+            <div class="header-actions">
+                <button class="theme-toggle" id="themeToggleBtn">
+                    <i class="fas fa-moon" id="themeIcon"></i>
+                </button>
+            </div>
         </div>
-        <p class="tagline">Your personal AI conversation partner</p>
-        
-        <div class="chat-card">
-            <div class="status-row">
-                <div id="connectionStatus" class="status-pill disconnected">
-                    <i class="fas fa-plug"></i> Disconnected
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-container">
+        <!-- Hero Section -->
+        <section class="hero-section">
+            <h1 class="hero-title">Conversational AI Assistant</h1>
+            <p class="hero-subtitle">Experience natural voice interactions powered by advanced AI technology</p>
+        </section>
+
+        <!-- Voice Interface -->
+        <div class="voice-card" id="voiceCard">
+            <!-- Status Bar -->
+            <div class="status-bar">
+                <div class="status-item">
+                    <span class="status-indicator" id="connectionIndicator"></span>
+                    <span id="connectionStatus">Disconnected</span>
                 </div>
-                <div id="speakingStatus" class="status-pill silent">
-                    <i class="fas fa-volume-off"></i> Agent Silent
+                <div class="status-item">
+                    <span class="status-indicator" id="speakingIndicator"></span>
+                    <span id="speakingStatus">Idle</span>
+                    <div class="particles" id="particles">
+                        <div class="particle"></div>
+                        <div class="particle"></div>
+                        <div class="particle"></div>
+                        <div class="particle"></div>
+                        <div class="particle"></div>
+                        <div class="particle"></div>
+                        <div class="particle"></div>
+                        <div class="particle"></div>
+                    </div>
                 </div>
             </div>
-            
-            <div class="disk-container" id="diskContainer">
-                <div class="disk">
-                    <div class="wave-pattern"></div>
-                    <div class="wave"></div>
-                    <div class="wave"></div>
-                    <div class="wave"></div>
-                    <div class="wave"></div>
-                    <div class="wave"></div>
-                </div>
-                <div class="mic-icon">
-                    <i class="fas fa-microphone"></i>
+
+            <!-- Voice Visualizer -->
+            <div class="voice-visualizer">
+                <div class="visualizer-container">
+                    <div class="visualizer-orb" id="visualizerOrb">
+                        <i class="fas fa-microphone orb-icon" id="orbIcon"></i>
+                    </div>
+                    <div class="sound-waves" id="soundWaves">
+                        <div class="sound-wave"></div>
+                        <div class="sound-wave"></div>
+                        <div class="sound-wave"></div>
+                        <div class="sound-wave"></div>
+                    </div>
+                    <div class="frequency-bars" id="frequencyBars">
+                        <div class="frequency-bar"></div>
+                        <div class="frequency-bar"></div>
+                        <div class="frequency-bar"></div>
+                        <div class="frequency-bar"></div>
+                        <div class="frequency-bar"></div>
+                        <div class="frequency-bar"></div>
+                        <div class="frequency-bar"></div>
+                    </div>
                 </div>
             </div>
-            
-            <div class="action-buttons">
-                <button id="startButton" class="action-button start">
-                    <i class="fas fa-microphone"></i>
+
+            <!-- Controls -->
+            <div class="controls">
+                <button class="control-btn primary" id="startButton">
+                    <i class="fas fa-play"></i>
                     <span>Start Conversation</span>
                 </button>
-                <button id="endButton" class="action-button end" disabled>
-                    <i class="fas fa-stop-circle"></i>
-                    <span>End Conversation</span>
+                <button class="control-btn secondary" id="endButton" disabled>
+                    <i class="fas fa-stop"></i>
+                    <span>End</span>
                 </button>
             </div>
-            
-            <div class="tips-section">
-                <div class="tips-header">
-                    <i class="fas fa-lightbulb"></i>
-                    <h3>Tips</h3>
+        </div>
+
+        <!-- Features -->
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-bolt"></i>
                 </div>
-                <ul class="tips-list">
-                    <li><span class="arrow">→</span> Speak clearly when the AI is listening</li>
-                    <li><span class="arrow">→</span> Try asking about different topics</li>
-                    <li><span class="arrow">→</span> You can interrupt the AI by speaking</li>
-                </ul>
+                <h3 class="feature-title">Real-time Response</h3>
+                <p class="feature-description">Experience instant AI responses with minimal latency for natural conversations</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-brain"></i>
+                </div>
+                <h3 class="feature-title">Context Aware</h3>
+                <p class="feature-description">AI remembers context throughout the conversation for more meaningful interactions</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-shield-alt"></i>
+                </div>
+                <h3 class="feature-title">Secure & Private</h3>
+                <p class="feature-description">Your conversations are processed securely with enterprise-grade encryption</p>
             </div>
         </div>
-        
-        <elevenlabs-convai agent-id="agent_01jwjjfmjqejbsn6gnd7dma2e2"></elevenlabs-convai>
-        <script src="https://unpkg.com/@elevenlabs/convai-widget-embed" async type="text/javascript"></script>
-    </div>
-    
+
+        <!-- Hidden ElevenLabs Widget -->
+        <div style="display: none;">
+            <elevenlabs-convai agent-id="agent_01jwjjfmjqejbsn6gnd7dma2e2"></elevenlabs-convai>
+        </div>
+    </main>
+
+    <!-- Footer -->
     <footer>
         <div class="footer-content">
-            <p>Powered by <a href="https://elevenlabs.io">ElevenLabs</a> <span class="ai-text">Conversational AI</span></p>
-            <button id="scrollTopBtn" class="scroll-top-btn"><i class="fas fa-arrow-up"></i></button>
+            <p>Powered by ElevenLabs Conversational AI</p>
+            <div class="footer-links">
+                <a href="#">Documentation</a>
+                <a href="#">Privacy Policy</a>
+                <a href="#">Terms of Service</a>
+            </div>
         </div>
     </footer>
-    
+
+    <!-- Notification -->
     <div id="notification" class="notification">
-        <div class="notification-content">
-            <i class="notification-icon"></i>
-            <span class="notification-message"></span>
-        </div>
+        <i class="notification-icon"></i>
+        <span class="notification-message"></span>
     </div>
-    
+
+    <script src="https://unpkg.com/@elevenlabs/convai-widget-embed" async type="text/javascript"></script>
     <script src="bundle.js"></script>
 </body>
 </html>

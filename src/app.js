@@ -4,39 +4,52 @@ import { Conversation } from '@11labs/client';
 const API_URL = process.env.REACT_APP_API_URL || 'https://hackthon-backend-zeta.vercel.app';
 
 let conversation = null;
-let animationActive = false;
+let currentTheme = 'light';
 
-// Initialize scroll to top button and disk visualizer
+// Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
-    const scrollBtn = document.getElementById('scrollTopBtn');
-    
-    scrollBtn.addEventListener('click', () => {
-        window.scrollTo({
-            top: 0,
-            behavior: 'smooth'
-        });
-    });
-    
-    // Show/hide scroll button based on scroll position
-    window.addEventListener('scroll', () => {
-        if (window.scrollY > 300) {
-            scrollBtn.style.opacity = '1';
-        } else {
-            scrollBtn.style.opacity = '0';
-        }
-    });
+    // Theme toggle
+    const themeToggleBtn = document.getElementById('themeToggleBtn');
+    themeToggleBtn.addEventListener('click', toggleTheme);
     
     // Initialize buttons
     document.getElementById('startButton').addEventListener('click', startConversation);
     document.getElementById('endButton').addEventListener('click', endConversation);
     
-    // Initialize disk visualizer in paused state
-    pauseDiskAnimation();
-    
-    // Start simulating voice activity
-    setInterval(simulateVoiceActivity, 500);
+    // Initialize frequency animation
+    animateFrequencyBars();
 });
 
+// Theme toggle function
+function toggleTheme() {
+    const html = document.documentElement;
+    const themeIcon = document.getElementById('themeIcon');
+    
+    if (currentTheme === 'dark') {
+        html.removeAttribute('data-theme');
+        themeIcon.className = 'fas fa-moon';
+        currentTheme = 'light';
+    } else {
+        html.setAttribute('data-theme', 'dark');
+        themeIcon.className = 'fas fa-sun';
+        currentTheme = 'dark';
+    }
+}
+
+// Animate frequency bars
+function animateFrequencyBars() {
+    const bars = document.querySelectorAll('.frequency-bar');
+    setInterval(() => {
+        if (document.getElementById('frequencyBars').classList.contains('active')) {
+            bars.forEach(bar => {
+                const height = Math.random() * 40 + 10;
+                bar.style.height = `${height}px`;
+            });
+        }
+    }, 100);
+}
+
+// Request microphone permission
 async function requestMicrophonePermission() {
     try {
         await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -47,6 +60,7 @@ async function requestMicrophonePermission() {
     }
 }
 
+// Get signed URL from the backend
 async function getSignedUrl() {
     try {
         const response = await fetch(`${API_URL}/api/signed-url`);
@@ -59,171 +73,58 @@ async function getSignedUrl() {
     }
 }
 
+// Update connection status UI
 function updateConnectionStatus(isConnected) {
-    const statusElement = document.getElementById('connectionStatus');
+    const connectionIndicator = document.getElementById('connectionIndicator');
+    const connectionStatus = document.getElementById('connectionStatus');
+    const voiceCard = document.getElementById('voiceCard');
     
     if (isConnected) {
-        statusElement.innerHTML = '<i class="fas fa-plug"></i> Connected';
-        statusElement.classList.remove('disconnected');
-        statusElement.classList.add('connected');
-        startDiskAnimation();
+        connectionIndicator.classList.add('connected');
+        connectionStatus.textContent = 'Connected';
+        voiceCard.classList.add('active');
     } else {
-        statusElement.innerHTML = '<i class="fas fa-plug"></i> Disconnected';
-        statusElement.classList.remove('connected');
-        statusElement.classList.add('disconnected');
-        pauseDiskAnimation();
+        connectionIndicator.classList.remove('connected');
+        connectionStatus.textContent = 'Disconnected';
+        voiceCard.classList.remove('active');
+        
+        // Reset UI components
+        updateSpeakingStatus({ mode: 'listening' });
     }
 }
 
+// Update speaking status UI
 function updateSpeakingStatus(mode) {
-    const statusElement = document.getElementById('speakingStatus');
-    const diskContainer = document.getElementById('diskContainer');
+    const speakingIndicator = document.getElementById('speakingIndicator');
+    const speakingStatus = document.getElementById('speakingStatus');
+    const visualizerOrb = document.getElementById('visualizerOrb');
+    const soundWaves = document.getElementById('soundWaves');
+    const frequencyBars = document.getElementById('frequencyBars');
+    const particles = document.getElementById('particles');
+    const orbIcon = document.getElementById('orbIcon');
+    
     const isSpeaking = mode.mode === 'speaking';
     
     if (isSpeaking) {
-        statusElement.innerHTML = '<i class="fas fa-volume-high"></i> Agent Speaking';
-        statusElement.classList.remove('silent');
-        statusElement.classList.add('speaking');
-        diskContainer.classList.add('speaking');
-        animateSpeakingDisk();
+        speakingIndicator.classList.add('speaking');
+        speakingStatus.textContent = 'AI Speaking';
+        visualizerOrb.classList.add('active');
+        soundWaves.classList.add('active');
+        frequencyBars.classList.add('active');
+        particles.classList.add('active');
+        orbIcon.className = 'fas fa-volume-up orb-icon';
     } else {
-        statusElement.innerHTML = '<i class="fas fa-volume-off"></i> Agent Silent';
-        statusElement.classList.remove('speaking');
-        statusElement.classList.add('silent');
-        diskContainer.classList.remove('speaking');
-        animateListeningDisk();
+        speakingIndicator.classList.remove('speaking');
+        speakingStatus.textContent = 'Listening';
+        visualizerOrb.classList.remove('active');
+        soundWaves.classList.remove('active');
+        frequencyBars.classList.remove('active');
+        particles.classList.remove('active');
+        orbIcon.className = 'fas fa-microphone orb-icon';
     }
 }
 
-// New functions for disk animation
-function startDiskAnimation() {
-    const diskContainer = document.getElementById('diskContainer');
-    diskContainer.classList.remove('paused');
-    animationActive = true;
-}
-
-function pauseDiskAnimation() {
-    const diskContainer = document.getElementById('diskContainer');
-    diskContainer.classList.add('paused');
-    animationActive = false;
-}
-
-function animateSpeakingDisk() {
-    if (!animationActive) return;
-    
-    const diskContainer = document.getElementById('diskContainer');
-    const waves = document.querySelectorAll('.wave');
-    
-    // Change mic icon to speaker when AI is speaking
-    const micIcon = diskContainer.querySelector('.mic-icon i');
-    micIcon.className = 'fas fa-volume-high';
-    
-    // Increase animation intensity
-    waves.forEach((wave, index) => {
-        wave.style.animationDuration = '1.2s';
-    });
-    
-    // Rotate disk faster
-    const disk = diskContainer.querySelector('.disk');
-    disk.style.animationDuration = '4s';
-}
-
-function animateListeningDisk() {
-    if (!animationActive) return;
-    
-    const diskContainer = document.getElementById('diskContainer');
-    const waves = document.querySelectorAll('.wave');
-    
-    // Change back to mic icon when AI is listening
-    const micIcon = diskContainer.querySelector('.mic-icon i');
-    micIcon.className = 'fas fa-microphone';
-    
-    // Normal animation intensity
-    waves.forEach((wave, index) => {
-        wave.style.animationDuration = '2s';
-    });
-    
-    // Normal disk rotation
-    const disk = diskContainer.querySelector('.disk');
-    disk.style.animationDuration = '8s';
-}
-
-function simulateVoiceActivity() {
-    if (!animationActive) return;
-    
-    const diskContainer = document.getElementById('diskContainer');
-    const isSpeaking = diskContainer.classList.contains('speaking');
-    const waves = document.querySelectorAll('.wave');
-    const randomIntensity = Math.random();
-    
-    // Apply different intensity based on whether the AI is speaking or listening
-    waves.forEach((wave, index) => {
-        let baseScale = isSpeaking ? 0.7 : 0.5;
-        let intensityMultiplier = isSpeaking ? 1.8 : 1.5;
-        const scale = baseScale + randomIntensity * intensityMultiplier;
-        const delay = index * 0.1;
-        
-        wave.style.transform = `translate(-50%, -50%) scale(${scale})`;
-    });
-    
-    // Change disk color slightly based on activity
-    const disk = document.querySelector('.disk');
-    const hue = Math.floor(Math.random() * 30); // Small range to stay in purple theme
-    disk.style.filter = `hue-rotate(${hue}deg) brightness(${0.9 + randomIntensity * 0.2})`;
-}
-
-async function startConversation() {
-    const startButton = document.getElementById('startButton');
-    const endButton = document.getElementById('endButton');
-    
-    // Change button to loading state
-    startButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Connecting...</span>';
-    startButton.disabled = true;
-    
-    try {
-        const hasPermission = await requestMicrophonePermission();
-        if (!hasPermission) {
-            showNotification('Microphone permission is required for the conversation.', 'error');
-            startButton.innerHTML = '<i class="fas fa-microphone"></i><span>Start Conversation</span>';
-            startButton.disabled = false;
-            return;
-        }
-
-        const signedUrl = await getSignedUrl();
-        
-        conversation = await Conversation.startSession({
-            signedUrl: signedUrl,
-            onConnect: () => {
-                updateConnectionStatus(true);
-                startButton.disabled = true;
-                endButton.disabled = false;
-                startButton.innerHTML = '<i class="fas fa-microphone"></i><span>Start Conversation</span>';
-                showNotification('Connected successfully! You can start speaking now.', 'success');
-            },
-            onDisconnect: () => {
-                updateConnectionStatus(false);
-                startButton.disabled = false;
-                endButton.disabled = true;
-                updateSpeakingStatus({ mode: 'listening' });
-            },
-            onError: (error) => {
-                console.error('Conversation error:', error);
-                showNotification('An error occurred during the conversation.', 'error');
-                startButton.disabled = false;
-                startButton.innerHTML = '<i class="fas fa-microphone"></i><span>Start Conversation</span>';
-            },
-            onModeChange: (mode) => {
-                updateSpeakingStatus(mode);
-            }
-        });
-    } catch (error) {
-        console.error('Error starting conversation:', error);
-        showNotification('Failed to start conversation. Please try again.', 'error');
-        startButton.disabled = false;
-        startButton.innerHTML = '<i class="fas fa-microphone"></i><span>Start Conversation</span>';
-    }
-}
-
+// Show notification
 function showNotification(message, type = 'info') {
     const notification = document.getElementById('notification');
     const notificationMessage = notification.querySelector('.notification-message');
@@ -248,10 +149,66 @@ function showNotification(message, type = 'info') {
     }, 5000);
 }
 
-async function endConversation() {
+// Start conversation with ElevenLabs API
+async function startConversation() {
+    const startButton = document.getElementById('startButton');
     const endButton = document.getElementById('endButton');
-    endButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Ending...</span>';
+    
+    // Change button to loading state
+    startButton.disabled = true;
+    startButton.innerHTML = '<i class="fas fa-spinner spinner"></i><span>Connecting...</span>';
+    
+    try {
+        const hasPermission = await requestMicrophonePermission();
+        if (!hasPermission) {
+            showNotification('Microphone permission is required for the conversation.', 'error');
+            startButton.innerHTML = '<i class="fas fa-play"></i><span>Start Conversation</span>';
+            startButton.disabled = false;
+            return;
+        }
+
+        const signedUrl = await getSignedUrl();
+        
+        conversation = await Conversation.startSession({
+            signedUrl: signedUrl,
+            onConnect: () => {
+                updateConnectionStatus(true);
+                startButton.disabled = true;
+                endButton.disabled = false;
+                startButton.innerHTML = '<i class="fas fa-play"></i><span>Start Conversation</span>';
+                showNotification('Connected successfully! You can start speaking now.', 'success');
+            },
+            onDisconnect: () => {
+                updateConnectionStatus(false);
+                startButton.disabled = false;
+                endButton.disabled = true;
+                endButton.innerHTML = '<i class="fas fa-stop"></i><span>End</span>';
+            },
+            onError: (error) => {
+                console.error('Conversation error:', error);
+                showNotification('An error occurred during the conversation.', 'error');
+                startButton.disabled = false;
+                startButton.innerHTML = '<i class="fas fa-play"></i><span>Start Conversation</span>';
+            },
+            onModeChange: (mode) => {
+                updateSpeakingStatus(mode);
+            }
+        });
+    } catch (error) {
+        console.error('Error starting conversation:', error);
+        showNotification('Failed to start conversation. Please try again.', 'error');
+        startButton.disabled = false;
+        startButton.innerHTML = '<i class="fas fa-play"></i><span>Start Conversation</span>';
+    }
+}
+
+// End conversation
+async function endConversation() {
+    const startButton = document.getElementById('startButton');
+    const endButton = document.getElementById('endButton');
+    
     endButton.disabled = true;
+    endButton.innerHTML = '<i class="fas fa-spinner spinner"></i><span>Ending...</span>';
     
     try {
         if (conversation) {
@@ -259,16 +216,20 @@ async function endConversation() {
             conversation = null;
         }
         
-        endButton.innerHTML = '<i class="fas fa-stop-circle"></i><span>End Conversation</span>';
+        updateConnectionStatus(false);
+        startButton.disabled = false;
+        endButton.disabled = true;
+        endButton.innerHTML = '<i class="fas fa-stop"></i><span>End</span>';
         showNotification('Conversation ended successfully.', 'info');
     } catch (error) {
         console.error('Error ending conversation:', error);
-        endButton.innerHTML = '<i class="fas fa-stop-circle"></i><span>End Conversation</span>';
+        endButton.innerHTML = '<i class="fas fa-stop"></i><span>End</span>';
         endButton.disabled = false;
         showNotification('Error ending conversation.', 'error');
     }
 }
 
+// Global error handler
 window.addEventListener('error', function(event) {
     console.error('Global error:', event.error);
     showNotification('An unexpected error occurred.', 'error');
