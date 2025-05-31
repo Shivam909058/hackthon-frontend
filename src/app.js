@@ -13,6 +13,9 @@ let conversationHistory = [];
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
+// Add this near the top of your existing file, with other variable declarations
+let reminderCheckInterval = null;
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
     // Theme toggle
@@ -298,6 +301,81 @@ async function initializeConvaiWidget() {
     }
 }
 
+// Add this function to check for pending reminders
+async function checkForPendingReminders() {
+  if (!sessionId) return;
+  
+  try {
+    const response = await fetch(`${API_URL}/api/check-reminders?sessionId=${sessionId}`);
+    if (!response.ok) return;
+    
+    const data = await response.json();
+    const { pendingReminders } = data;
+    
+    if (pendingReminders && pendingReminders.length > 0) {
+      // Process each pending reminder
+      for (const reminder of pendingReminders) {
+        // Format a natural language response to the reminder
+        const reminderMessage = `${getRandomReminderPrefix()} ${reminder.task}`;
+        
+        // Create a synthetic assistant message to represent the reminder
+        const syntheticMessage = {
+          role: "assistant",
+          content: reminderMessage,
+          isReminder: true
+        };
+        
+        // Add to conversation history
+        conversationHistory.push(syntheticMessage);
+        
+        // If you have a UI element to display reminders, update it here
+        showNotification(`Reminder: ${reminder.task}`, 'reminder');
+        
+        // You might want to trigger speech synthesis to speak the reminder
+        if (window.speechSynthesis) {
+          const utterance = new SpeechSynthesisUtterance(reminderMessage);
+          window.speechSynthesis.speak(utterance);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error checking reminders:', error);
+  }
+}
+
+// Get a random natural language prefix for the reminder
+function getRandomReminderPrefix() {
+  const prefixes = [
+    "Beta, time's up!",
+    "Beta, reminder:",
+    "Don't forget to",
+    "Beta, you asked me to remind you about",
+    "Time to",
+    "Just a reminder to",
+    "Beta, it's time to"
+  ];
+  return prefixes[Math.floor(Math.random() * prefixes.length)];
+}
+
+// Start checking for reminders when conversation starts
+function startReminderCheck() {
+  // Clear any existing interval
+  if (reminderCheckInterval) {
+    clearInterval(reminderCheckInterval);
+  }
+  
+  // Check for reminders every 1 second
+  reminderCheckInterval = setInterval(checkForPendingReminders, 1000);
+}
+
+// Stop checking for reminders when conversation ends
+function stopReminderCheck() {
+  if (reminderCheckInterval) {
+    clearInterval(reminderCheckInterval);
+    reminderCheckInterval = null;
+  }
+}
+
 // Start conversation with ElevenLabs API
 async function startConversation() {
     const startButton = document.getElementById('startButton');
@@ -327,6 +405,9 @@ async function startConversation() {
         
         // Start keep-alive pings for session
         startKeepAliveInterval();
+        
+        // Start checking for reminders
+        startReminderCheck();
         
         // Clear conversation history
         conversationHistory = [];
@@ -557,6 +638,9 @@ async function endConversation() {
         if (container) {
             container.innerHTML = '';
         }
+        
+        // Stop reminder checks
+        stopReminderCheck();
     } catch (error) {
         console.error('Error ending conversation:', error);
         endButton.innerHTML = '<i class="fas fa-stop"></i><span>End</span>';
@@ -602,3 +686,33 @@ function ensureWavesAreVisible() {
     wavesContainer.style.display = 'block';
     wavesContainer.style.opacity = '0.4';
 }
+
+// Update your processMessage function or similar to detect timer requests
+function processUserMessage(message) {
+  // Check if the message contains a timer/reminder request
+  const timerPatterns = [
+    /remind me in (\d+) (second|seconds|minute|minutes|hour|hours)/i,
+    /(\d+) (second|seconds|minute|minutes|hour|hours) ke baad yaad dila dena/i,
+    /(\d+) (second|seconds|minute|minutes|hour|hours) baad .* yaad dila dena/i
+  ];
+  
+  let containsTimerRequest = false;
+  for (const pattern of timerPatterns) {
+    if (pattern.test(message)) {
+      containsTimerRequest = true;
+      break;
+    }
+  }
+  
+  // If it's a timer request, we might want to handle it specially
+  if (containsTimerRequest) {
+    console.log('Timer request detected in message:', message);
+    // You might add special handling here
+  }
+  
+  // Return the message for normal processing
+  return message;
+}
+
+// You'd call this when processing user input
+// For example, in your onMessage handler or similar
