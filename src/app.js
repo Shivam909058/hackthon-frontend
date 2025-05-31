@@ -6,7 +6,7 @@ const API_URL = process.env.REACT_APP_API_URL || 'https://hackthon-backend-zeta.
 let conversation = null;
 let animationActive = false;
 
-// Initialize scroll to top button
+
 document.addEventListener('DOMContentLoaded', function() {
     const scrollBtn = document.getElementById('scrollTopBtn');
     
@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // Show/hide scroll button based on scroll position
+    
     window.addEventListener('scroll', () => {
         if (window.scrollY > 300) {
             scrollBtn.style.opacity = '1';
@@ -26,11 +26,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Initialize buttons
+    
     document.getElementById('startButton').addEventListener('click', startConversation);
     document.getElementById('endButton').addEventListener('click', endConversation);
     
-    // Initialize visualizer in paused state
+    
     pauseVisualizer();
 });
 
