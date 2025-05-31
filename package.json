@@ -4,6 +4,7 @@
   "description": "Frontend for VoiceChat AI application",
   "scripts": {
     "build": "webpack --mode production",
+    "vercel-build": "webpack --mode production",
     "dev": "webpack serve --mode development",
     "start": "webpack serve --mode development"
   },
