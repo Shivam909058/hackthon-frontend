@@ -5,8 +5,11 @@ const API_URL = process.env.REACT_APP_API_URL || 'https://hackthon-backend-zeta.
 
 let conversation = null;
 let currentTheme = 'light';
+
+// Add these variables for stateful session management
+let userId = localStorage.getItem('voicechat_userId') || null;
 let sessionId = null;
-let keepAliveInterval = null;
+let conversationHistory = [];
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
@@ -26,41 +29,37 @@ document.addEventListener('DOMContentLoaded', function() {
     // Ensure waves are visible
     ensureWavesAreVisible();
     
-    // Clean up on page unload
-    window.addEventListener('beforeunload', cleanupOnUnload);
+    // Add event listener for unload/beforeunload to end session
+    window.addEventListener('beforeunload', endSessionOnUnload);
+    
+    // Initialize user ID if not present
+    if (!userId) {
+        userId = generateUserId();
+        localStorage.setItem('voicechat_userId', userId);
+    }
 });
 
-// Clean up resources when page is closed
-function cleanupOnUnload() {
-    if (conversation) {
-        try {
-            // Try to end the conversation gracefully
-            conversation.endSession();
-        } catch (error) {
-            console.error('Error ending conversation on unload:', error);
-        }
-    }
-    
+// Generate a simple user ID
+function generateUserId() {
+    return 'user_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+}
+
+// End session when page is closed
+function endSessionOnUnload() {
     if (sessionId) {
-        // Notify the server that the session is ending
-        try {
-            fetch(`${API_URL}/api/end-session`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ sessionId }),
-                // Use keepalive to ensure the request completes even if page is unloading
-                keepalive: true
-            });
-        } catch (error) {
-            console.error('Error ending session on unload:', error);
+        // Use sendBeacon for reliable delivery during page unload
+        navigator.sendBeacon(`${API_URL}/api/end-session`, JSON.stringify({
+            sessionId
+        }));
+        
+        // Also try to end the conversation
+        if (conversation) {
+            try {
+                conversation.endSession();
+            } catch (e) {
+                // Ignore errors during page unload
+            }
         }
-    }
-    
-    // Clear any intervals
-    if (keepAliveInterval) {
-        clearInterval(keepAliveInterval);
     }
 }
 
@@ -107,17 +106,11 @@ async function requestMicrophonePermission() {
 // Get signed URL from the backend
 async function getSignedUrl() {
     try {
-        // Include existing session ID if we have one
-        let url = `${API_URL}/api/signed-url`;
-        if (sessionId) {
-            url += `?sessionId=${sessionId}`;
-        }
-        
-        const response = await fetch(url);
+        const response = await fetch(`${API_URL}/api/signed-url?userId=${userId}${sessionId ? `&sessionId=${sessionId}` : ''}`);
         if (!response.ok) throw new Error('Failed to get signed URL');
         const data = await response.json();
         
-        // Save the session ID for future requests
+        // Store session ID if returned
         if (data.sessionId) {
             sessionId = data.sessionId;
         }
@@ -126,23 +119,6 @@ async function getSignedUrl() {
     } catch (error) {
         console.error('Error getting signed URL:', error);
         throw error;
-    }
-}
-
-// Send keep-alive ping to server
-async function sendKeepAlive() {
-    if (!sessionId) return;
-    
-    try {
-        await fetch(`${API_URL}/api/keep-alive`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ sessionId })
-        });
-    } catch (error) {
-        console.error('Error sending keep-alive:', error);
     }
 }
 
@@ -156,6 +132,60 @@ async function getAgentId() {
     } catch (error) {
         console.error('Error getting agent ID:', error);
         throw error;
+    }
+}
+
+// Keep session alive
+function startKeepAliveInterval() {
+    // Clear any existing interval
+    if (window.keepAliveInterval) {
+        clearInterval(window.keepAliveInterval);
+    }
+    
+    // Set up new interval if we have a session ID
+    if (sessionId) {
+        window.keepAliveInterval = setInterval(async () => {
+            try {
+                if (sessionId) {
+                    await fetch(`${API_URL}/api/keep-alive`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ sessionId })
+                    });
+                }
+            } catch (error) {
+                console.error('Error in keep-alive:', error);
+            }
+        }, 30000); // Every 30 seconds
+    }
+}
+
+// Store conversation for memory
+async function storeConversationMemory(userMessage, assistantMessage) {
+    try {
+        if (!sessionId || !userId) return;
+        
+        const messages = [
+            { role: "user", content: userMessage },
+            { role: "assistant", content: assistantMessage }
+        ];
+        
+        // Store in backend memory system
+        await fetch(`${API_URL}/api/store-conversation`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                userId,
+                sessionId,
+                messages
+            })
+        });
+    } catch (error) {
+        console.error('Error storing conversation memory:', error);
     }
 }
 
@@ -245,27 +275,26 @@ function showNotification(message, type = 'info') {
     }, 5000);
 }
 
-// Setup the Convai widget
-async function setupConvaiWidget() {
+// Initialize convai widget
+async function initializeConvaiWidget() {
     try {
         const agentId = await getAgentId();
         const container = document.getElementById('convai-container');
         
-        // Clear any existing widgets
-        container.innerHTML = '';
-        
-        // Create the new widget
-        const widget = document.createElement('elevenlabs-convai');
-        widget.setAttribute('agent-id', agentId);
-        
-        // Add to container
-        container.appendChild(widget);
-        
-        // Give time for the widget to initialize
-        return new Promise(resolve => setTimeout(resolve, 1000));
+        // Ensure container is empty
+        if (container) {
+            container.innerHTML = '';
+            
+            // Create widget element
+            const widget = document.createElement('elevenlabs-convai');
+            widget.setAttribute('agent-id', agentId);
+            container.appendChild(widget);
+            
+            // Wait for the widget to load
+            return new Promise(resolve => setTimeout(resolve, 1000));
+        }
     } catch (error) {
-        console.error('Error setting up Convai widget:', error);
-        throw error;
+        console.error('Error initializing Convai widget:', error);
     }
 }
 
@@ -279,7 +308,7 @@ async function startConversation() {
     startButton.innerHTML = '<i class="fas fa-spinner spinner"></i><span>Connecting...</span>';
     
     try {
-        // Reset reconnect attempts counter
+        // Reset reconnect attempts
         reconnectAttempts = 0;
         
         const hasPermission = await requestMicrophonePermission();
@@ -290,19 +319,19 @@ async function startConversation() {
             return;
         }
         
-        // Set up the Convai widget
-        await setupConvaiWidget();
+        // Initialize Convai widget
+        await initializeConvaiWidget();
 
-        // Get signed URL
+        // Get signed URL with userId
         const signedUrl = await getSignedUrl();
         
-        // Start keep-alive pings to server
-        if (keepAliveInterval) {
-            clearInterval(keepAliveInterval);
-        }
-        keepAliveInterval = setInterval(sendKeepAlive, 10000); // Every 10 seconds
+        // Start keep-alive pings for session
+        startKeepAliveInterval();
         
-        // Start the conversation
+        // Clear conversation history
+        conversationHistory = [];
+        
+        // Start conversation
         conversation = await Conversation.startSession({
             signedUrl: signedUrl,
             onConnect: () => {
@@ -319,10 +348,10 @@ async function startConversation() {
                 console.log('WebSocket disconnected');
                 
                 // Don't update UI immediately, try to reconnect first
-                if (endButton.disabled === false) { // Only try to reconnect if we haven't manually ended
+                if (endButton.disabled === false) {
+                    // Only attempt reconnection if we haven't manually ended
                     attemptReconnection();
                 } else {
-                    // We manually ended, so update UI
                     updateConnectionStatus(false);
                     startButton.disabled = false;
                     endButton.disabled = true;
@@ -332,7 +361,7 @@ async function startConversation() {
                 console.error('Conversation error:', error);
                 
                 if (error.message && error.message.includes('WebSocket')) {
-                    // WebSocket specific errors, try to reconnect
+                    // Try to reconnect for WebSocket errors
                     attemptReconnection();
                 } else {
                     showNotification('An error occurred during the conversation.', 'error');
@@ -342,6 +371,25 @@ async function startConversation() {
             },
             onModeChange: (mode) => {
                 updateSpeakingStatus(mode);
+            },
+            onMessage: (message) => {
+                // Track messages and store in memory
+                if (message.role === 'assistant') {
+                    // Find the most recent user message
+                    const lastUserMessage = conversationHistory.length > 0 ? 
+                        conversationHistory[conversationHistory.length - 1].content : 
+                        null;
+                    
+                    if (lastUserMessage) {
+                        storeConversationMemory(lastUserMessage, message.content);
+                    }
+                    
+                    // Add to conversation history
+                    conversationHistory.push({ role: 'assistant', content: message.content });
+                } else if (message.role === 'user') {
+                    // Add user message to history
+                    conversationHistory.push({ role: 'user', content: message.content });
+                }
             }
         });
     } catch (error) {
@@ -351,14 +399,14 @@ async function startConversation() {
         startButton.innerHTML = '<i class="fas fa-play"></i><span>Start Conversation</span>';
         
         // Clear any intervals
-        if (keepAliveInterval) {
-            clearInterval(keepAliveInterval);
-            keepAliveInterval = null;
+        if (window.keepAliveInterval) {
+            clearInterval(window.keepAliveInterval);
+            window.keepAliveInterval = null;
         }
     }
 }
 
-// Attempt to reconnect after disconnection
+// Attempt to reconnect after disconnect
 async function attemptReconnection() {
     if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
         console.log('Max reconnection attempts reached, giving up');
@@ -369,10 +417,10 @@ async function attemptReconnection() {
         document.getElementById('startButton').innerHTML = '<i class="fas fa-play"></i><span>Start Conversation</span>';
         document.getElementById('endButton').disabled = true;
         
-        // Clear any intervals
-        if (keepAliveInterval) {
-            clearInterval(keepAliveInterval);
-            keepAliveInterval = null;
+        // Clear intervals
+        if (window.keepAliveInterval) {
+            clearInterval(window.keepAliveInterval);
+            window.keepAliveInterval = null;
         }
         
         return;
@@ -385,17 +433,17 @@ async function attemptReconnection() {
         // Get a fresh signed URL
         const signedUrl = await getSignedUrl();
         
-        // Clean up old conversation if it exists
+        // Clean up old conversation
         if (conversation) {
             try {
                 await conversation.endSession();
             } catch (e) {
-                console.log('Error ending old session:', e);
+                console.error('Error ending old session:', e);
                 // Continue anyway
             }
         }
         
-        // Create a new conversation
+        // Create new conversation
         conversation = await Conversation.startSession({
             signedUrl: signedUrl,
             onConnect: () => {
@@ -405,12 +453,12 @@ async function attemptReconnection() {
                 document.getElementById('endButton').disabled = false;
                 showNotification('Reconnected successfully!', 'success');
                 
-                // Reset reconnect attempts on successful connection
+                // Reset reconnect attempts
                 reconnectAttempts = 0;
             },
             onDisconnect: () => {
                 console.log('WebSocket disconnected after reconnection');
-                // Try to reconnect again
+                // Try again after delay
                 setTimeout(attemptReconnection, 2000);
             },
             onError: (error) => {
@@ -420,12 +468,31 @@ async function attemptReconnection() {
             },
             onModeChange: (mode) => {
                 updateSpeakingStatus(mode);
+            },
+            onMessage: (message) => {
+                // Track messages and store in memory
+                if (message.role === 'assistant') {
+                    // Find the most recent user message
+                    const lastUserMessage = conversationHistory.length > 0 ? 
+                        conversationHistory[conversationHistory.length - 1].content : 
+                        null;
+                    
+                    if (lastUserMessage) {
+                        storeConversationMemory(lastUserMessage, message.content);
+                    }
+                    
+                    // Add to conversation history
+                    conversationHistory.push({ role: 'assistant', content: message.content });
+                } else if (message.role === 'user') {
+                    // Add user message to history
+                    conversationHistory.push({ role: 'user', content: message.content });
+                }
             }
         });
     } catch (error) {
         console.error('Error during reconnection:', error);
         
-        // Exponential backoff
+        // Use exponential backoff for reconnection attempts
         const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
         setTimeout(attemptReconnection, delay);
     }
@@ -441,12 +508,12 @@ async function endConversation() {
     
     try {
         // Clear keep-alive interval
-        if (keepAliveInterval) {
-            clearInterval(keepAliveInterval);
-            keepAliveInterval = null;
+        if (window.keepAliveInterval) {
+            clearInterval(window.keepAliveInterval);
+            window.keepAliveInterval = null;
         }
         
-        // Notify server to end session
+        // End session on server
         if (sessionId) {
             try {
                 await fetch(`${API_URL}/api/end-session`, {
@@ -457,7 +524,7 @@ async function endConversation() {
                     body: JSON.stringify({ sessionId })
                 });
             } catch (e) {
-                console.error('Error notifying server of session end:', e);
+                console.error('Error ending session on server:', e);
                 // Continue anyway
             }
         }
@@ -473,8 +540,9 @@ async function endConversation() {
             conversation = null;
         }
         
-        // Reset state
+        // Reset conversation state
         sessionId = null;
+        conversationHistory = [];
         reconnectAttempts = 0;
         
         // Update UI
@@ -484,9 +552,11 @@ async function endConversation() {
         endButton.innerHTML = '<i class="fas fa-stop"></i><span>End</span>';
         showNotification('Conversation ended successfully.', 'info');
         
-        // Clean up the Convai widget
+        // Clear Convai widget
         const container = document.getElementById('convai-container');
-        container.innerHTML = '';
+        if (container) {
+            container.innerHTML = '';
+        }
     } catch (error) {
         console.error('Error ending conversation:', error);
         endButton.innerHTML = '<i class="fas fa-stop"></i><span>End</span>';
